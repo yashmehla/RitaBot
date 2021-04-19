@@ -134,46 +134,120 @@ const Tasks = db.define("tasks", {
    ]
 });
 
+// -----------------------
+// Add Server to Database
+// -----------------------
+
+exports.addServer = async function(id, lang)
+{
+   console.log("DEBUG: Stage Add Server to Database");
+   newServer = await Servers.create({  
+                        embedstyle: "on",
+                        bot2botstyle: "off",
+                        id: id,
+                        lang: lang,
+                        webhookid: null,
+                        webhooktoken: null,
+                        prefix: "!tr" }).catch(err => console.log("Server already exists error suppressed = ", err));
+   if (id !== "bot")
+   {
+      server_obj[id] = {db: newServer};
+   }
+};
+
+// ------------------
+// Deactivate Server
+// ------------------
+exports.removeServer = function(id)
+{
+   console.log("DEBUG: Stage Deactivate Server");
+   server_obj[id].db.active = false;
+   return server_obj[id].db.save();
+};
+
+// -------------------
+// Update Server Lang
+// -------------------
+exports.updateServerLang = function(id, lang)
+{
+   console.log("DEBUG: Stage Update Server Lang");
+   server_obj[id].db.lang = lang;
+   return server_obj[id].db.save();
+};
+
+// -------------------------------
+// Update Embedded Variable in DB
+// -------------------------------
+exports.updateEmbedVar = function(id, embedstyle)
+{
+   console.log("DEBUG: Stage Update Embedded Variable in DB");
+   server_obj[id].db.embedstyle = embedstyle;
+   return server_obj[id].db.save();
+};
+
+// ------------------------------
+// Update Bot2Bot Variable In DB
+// ------------------------------
+exports.updateBot2BotVar = function(id, bot2botstyle)
+{
+   console.log("DEBUG: Stage Update Bot2Bot Variable In DB");
+   server_obj[id].db.bot2botstyle = bot2botstyle;
+   return server_obj[id].db.save();
+};
+
+// -----------------------------------------------
+// Update webhookID & webhookToken Variable In DB
+// -----------------------------------------------
+exports.updateWebhookVar = function(id, webhookid, webhooktoken, webhookactive)
+{
+   console.log("DEBUG: Stage Update webhookID & webhookToken Variable In DB");
+   server_obj[id].db.webhookid = webhookid;
+   server_obj[id].db.webhooktoken = webhooktoken;
+   server_obj[id].db.webhookactive = webhookactive;
+   return server_obj[id].db.save();
+};
+
+// -------------------------
+// Deactivate debug Webhook
+// -------------------------
+exports.removeWebhook = function(id)
+{
+   console.log("DEBUG: Stage Deactivate debug Webhook");
+   server_obj[id].db.webhookactive = false;
+   return server_obj[id].db.save();
+};
+
+// --------------
+// Update prefix
+// --------------
+
+exports.updatePrefix = function(id, prefix)
+{
+   console.log("DEBUG: Stage Update prefix");
+   dbNewPrefix = prefix;
+   server_obj[id].db.prefix = prefix;
+   return server_obj[id].db.save();
+};
+
+//---------------------------------------------------------------------------------------------
+//-- All this function are for DB upgrades
+//---------------------------------------------------------------------------------------------
 // -------------------
 // Init/create tables
 // -------------------
-
 exports.initializeDatabase = async function(client)
 {
    console.log("DEBUG: Stage Init/create tables - Pre Sync");
    db.sync({ logging: console.log }).then(async() =>
    {
+      // Putting DB into newer version if necessary (add columns and so on)
       await this.upgradeDB();
       console.log("DEBUG: New columns should be added Before this point.");
-      Servers.upsert({ id: "bot", lang: "en" });
-      const guilds = client.guilds.array().length;
-      const guildsArray = client.guilds.array();
-      var i;
-      for (i = 0; i < guilds; i++)
-      {
-         const guild = guildsArray[i];
-         const guildID = guild.id;
-         Servers.findAll({ where: { id: guildID } }).then(projects =>
-         {
-            if (projects.length === 0)
-            {
-               Servers.upsert({ id: guildID,
-                  lang: "en" });
-            }
-         });
-      }
-      console.log("DEBUG: Stage Init/create tables - Pre serversFindAll");
-      const serversFindAll = await Servers.findAll();
-      for (let i = 0; i < serversFindAll.length; i++)
-      {
-         // eslint-disable-next-line prefer-const
-         let guild_id = serversFindAll[i].id;
-         // eslint-disable-next-line eqeqeq
-         if (guild_id != "bot")
-         {
-            server_obj[guild_id] = { db: serversFindAll[i] };
-         }
-      }
+
+      // Initialize Servers objects
+      await this.initializeServers(client);
+      
+      // Things to work on (Bro)
       console.log("DEBUG: Stage Init/create tables - Pre guildClient");
       const guildClient = Array.from(client.guilds.values());
       for (let i = 0; i < guildClient.length; i++)
@@ -188,132 +262,77 @@ exports.initializeDatabase = async function(client)
          server_obj.size += guild.memberCount;
       }
       console.log("----------------------------------------\nDatabase fully initialized.\n----------------------------------------");
-      // });
    });
 };
 
-// -----------------------
-// Add Server to Database
-// -----------------------
-
-exports.addServer = async function(id, lang)
+// -----------------------------
+// Initializate "servers" datas 
+// -----------------------------
+exports.initializeServers = async function(client)
 {
-   console.log("DEBUG: Stage Add Server to Database");
-   newServer = await Servers.create({  
-                        embedstyle: "on",
-                        bot2botstyle: "off",
-                        id: id,
-                        webhookid: null,
-                        webhooktoken: null,
-                        prefix: "!tr" }).catch(err => console.log("Server already exists error suppressed = ", err));
-   server_obj[id] = {db: newServer};
-};
+   // Getting all servers defined in DB
+   const serversFindAll = await Servers.findAll();
 
-// ------------------
-// Deactivate Server
-// ------------------
+   // If table is not initialized, we add a server named bot
+   if (serversFindAll.length === 0)
+   {
+      console.log("DEBUG: Stage Init tables - Adding bot server");
+      await this.addServer("bot", "en");
+   }
 
-exports.removeServer = function(id)
-{
-   console.log("DEBUG: Stage Deactivate Server");
-   server_obj[id].db.active = false;
-   return server_obj[id].db.save();
-};
+   // Getting all servers objects in memory
+   console.log("DEBUG: Stage Init tables - Getting servers from Db");
+   for (let i = 0; i < serversFindAll.length; i++)
+   {
+      // eslint-disable-next-line prefer-const
+      let guild_id = serversFindAll[i].id;
+      // eslint-disable-next-line eqeqeq
+      if (guild_id != "bot")
+      {
+         server_obj[guild_id] = { db: serversFindAll[i] };
+      }
+   }
 
-// -------------------
-// Update Server Lang
-// -------------------
+   // Checking all connected servers to the bot are present in DB
+   console.log("DEBUG: Stage Init tables - Checking bot servers Vs db Servers");
+   const guilds = client.guilds.array().length;
+   const guildsArray = client.guilds.array();
+   var i;
+   for (i = 0; i < guilds; i++)
+   {
+      const guild = guildsArray[i];
+      const guildID = guild.id;
+      // If it doesn't exists, we must add the server connected to the bot
+      if (!server_obj.hasOwnProperty(guildID))
+      {
+         console.log("DEBUG: Stage Init tables - Adding server id:" + guildID);
+         await this.addServer(guildID, "en");
+      }
+   }
+}
 
-exports.updateServerLang = function(id, lang, _cb)
-{
-   console.log("DEBUG: Stage Update Server Lang");
-   server_obj[id].db.lang = lang;
-   return server_obj[id].db.save();
-};
-
-// -------------------------------
-// Update Embedded Variable in DB
-// -------------------------------
-
-exports.updateEmbedVar = function(id, embedstyle, _cb)
-{
-   console.log("DEBUG: Stage Update Embedded Variable in DB");
-   server_obj[id].db.embedstyle = embedstyle;
-   return server_obj[id].db.save();
-};
-
-// ------------------------------
-// Update Bot2Bot Variable In DB
-// ------------------------------
-
-exports.updateBot2BotVar = function(id, bot2botstyle, _cb)
-{
-   console.log("DEBUG: Stage Update Bot2Bot Variable In DB");
-   server_obj[id].db.bot2botstyle = bot2botstyle;
-   return server_obj[id].db.save();
-};
-
-// -----------------------------------------------
-// Update webhookID & webhookToken Variable In DB
-// -----------------------------------------------
-
-exports.updateWebhookVar = function(id, webhookid, webhooktoken, webhookactive, _cb)
-{
-   console.log("DEBUG: Stage Update webhookID & webhookToken Variable In DB");
-   server_obj[id].db.webhookid = webhookid;
-   server_obj[id].db.webhooktoken = webhooktoken;
-   server_obj[id].db.webhookactive = webhookactive;
-   return server_obj[id].db.save();
-};
-
-// -------------------------
-// Deactivate debug Webhook
-// -------------------------
-
-exports.removeWebhook = function(id, _cb)
-{
-   console.log("DEBUG: Stage Deactivate debug Webhook");
-   server_obj[id].db.webhookactive = false;
-   return server_obj[id].db.save();
-};
-
-// --------------
-// Update prefix
-// --------------
-
-exports.updatePrefix = function(id, prefix, _cb)
-{
-   console.log("DEBUG: Stage Update prefix");
-   dbNewPrefix = prefix;
-   server_obj[id].db.prefix = prefix;
-   return server_obj[id].db.save();
-};
-
-//---------------------------------------------------------------------------------------------
-//-- All this function are for DB upgrades
-//---------------------------------------------------------------------------------------------
 // -----------------------------
 // Adding a column in DB if not exists
 // -----------------------------
-exports.updateColumn = async function(tableName, columnName, columnType, columnDefault)
+exports.addTableColumn = async function(tableName, tableDefinition, columnName, columnType, columnDefault)
 {
-   await db.getQueryInterface().describeTable(tableName).then(tableDefinition =>
+   // Adding column only when it's not in table definition
+   if (!tableDefinition[`${columnName}`])
+   {
+      console.log("--> Adding " + columnName + " column");
+      if (columnDefault === null)
       {
-         if (!tableDefinition[`${columnName}`])
-         {
-            console.log("--> Adding "+ columnName + " column");
-            if (columnDefault === null)
-            {
-               db.getQueryInterface().addColumn(tableName, columnName, {type: columnType});
-            }
-            else 
-            {
-               db.getQueryInterface().addColumn(tableName, columnName, {
-                  type: columnType,
-                  defaultValue: columnDefault});
-            }
-         }
-      });
+         // Adding column whithout a default value
+         await db.getQueryInterface().addColumn(tableName, columnName, {type: columnType});
+      }
+      else 
+      {
+         // Adding column with a default value
+         await db.getQueryInterface().addColumn(tableName, columnName, {
+               type: columnType,
+               defaultValue: columnDefault});
+      }
+   }
 }
 
 // -----------------------------
@@ -321,19 +340,20 @@ exports.updateColumn = async function(tableName, columnName, columnType, columnD
 // -----------------------------
 exports.upgradeDB = async function(data)
 {
-   console.log("DEBUG: Stage Add Missing Variable Columns");
+   console.log("DEBUG: Stage Add Missing Variable Columns for old RITA release");
    // For older version of RITA, they need to upgrade DB with adding new columns if needed
-   await this.updateColumn("servers", "prefix", Sequelize.STRING(32), "!tr");
-   await this.updateColumn("servers", "embedstyle", Sequelize.STRING(8), "on");
-   await this.updateColumn("servers", "bot2botstyle",  Sequelize.STRING(8), "off");
-   await this.updateColumn("servers", "webhookid", Sequelize.STRING(32));
-   await this.updateColumn("servers", "webhooktoken", Sequelize.STRING(255));
-   await this.updateColumn("servers", "webhookactive", Sequelize.BOOLEAN, false);
-   console.log("DEBUG: All New Columns Added");
+   serversDefinition = await db.getQueryInterface().describeTable("servers");
+   await this.addTableColumn("servers", serversDefinition, "prefix", Sequelize.STRING(32), "!tr");
+   await this.addTableColumn("servers", serversDefinition, "embedstyle", Sequelize.STRING(8), "on");
+   await this.addTableColumn("servers", serversDefinition, "bot2botstyle",  Sequelize.STRING(8), "off");
+   await this.addTableColumn("servers", serversDefinition, "webhookid", Sequelize.STRING(32));
+   await this.addTableColumn("servers", serversDefinition, "webhooktoken", Sequelize.STRING(255));
+   await this.addTableColumn("servers", serversDefinition, "webhookactive", Sequelize.BOOLEAN, false);
+   console.log("DEBUG: All New Columns Checked or Added");
 
    // For older version of RITA, must remove old unique index
-   console.log("DEBUG: Stage Remove old Unique index");
-   db.getQueryInterface().removeIndex("tasks", "tasks_origin_dest");
+   console.log("DEBUG: Stage Remove old RITA Unique index");
+   await db.getQueryInterface().removeIndex("tasks", "tasks_origin_dest");
    console.log("DEBUG : All old index removed");
 };
 
