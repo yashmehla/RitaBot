@@ -251,7 +251,9 @@ initializeServers = async function(client, Servers, server_obj)
       if (!server_obj.hasOwnProperty(guildID))
       {
          console.log("DEBUG: Stage Init tables - Adding server id:" + guildID);
-         await this.addServer(guildID, "en");
+         let connectedServer = await Servers.create({id: guildID, lang: "en"});
+         server_obj[guildID] = { db: connectedServer };
+         await connectedServer.save();
       }
    }
 
