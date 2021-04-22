@@ -6,138 +6,31 @@
 const autoTranslate = require("./auto");
 const Sequelize = require("sequelize");
 const logger = require("./logger");
+const DbInit = require("./db.init")
 const Op = Sequelize.Op;
 var dbNewPrefix = "";
 var server_obj = {};
 exports.server_obj = server_obj;
 
 // ----------------------
-// Database Auth Process
+// Database definition
 // ----------------------
+const db = DbInit.getDbInstance();
+const Servers = DbInit.defineServers(db);
+const Tasks = DbInit.defineTasks(db);
 
-console.log("DEBUG: Pre Stage Database Auth Process");
-const db =  (() => { 
-   // Define what kind of DB it is for Sequelize
-   if (process.env.DATABASE_URL.startsWith("postgres"))
-   {
-      return new Sequelize(process.env.DATABASE_URL, {
-         logging: console.log,
-         dialectOptions: {
-            ssl: {
-               require: true,
-               rejectUnauthorized: false
-            }
-         }
-      });
-   }
-   // In other case it's SQLite for now
-   else
-   {
-     return new Sequelize({
-         dialect: "sqlite",
-         dialectOptions: {
-            ssl: {
-               require: true,
-               rejectUnauthorized: false
-            }
-         },
-         storage: process.env.DATABASE_URL
-      });
-   }
-})();
-
-db
-   .authenticate()
-   .then(() =>
-   {
-      logger("dev","Successfully connected to database");
-   })
-   .catch(err =>
-   {
-      logger("error", err);
-   });
-
-// ---------------------------------
-// Database server table definition
-// ---------------------------------
-
-console.log("DEBUG: Pre Stage Database server table definition");
-const Servers = db.define("servers", {
-   id: {
-      type: Sequelize.STRING(32),
-      primaryKey: true,
-      unique: true,
-      allowNull: false
-   },
-   prefix: {
-      type: Sequelize.STRING(32),
-      defaultValue: "!tr"
-   },
-   lang: {
-      type: Sequelize.STRING(8),
-      defaultValue: "en"
-   },
-   count: {
-      type: Sequelize.INTEGER,
-      defaultValue: 0
-   },
-   active: {
-      type: Sequelize.BOOLEAN,
-      defaultValue: true
-   },
-   embedstyle: {
-      type: Sequelize.STRING(8),
-      defaultValue: "on"
-   },
-   bot2botstyle: {
-      type: Sequelize.STRING(8),
-      defaultValue: "off"
-   },
-   webhookid: Sequelize.STRING(32),
-   webhooktoken: Sequelize.STRING(255),
-   webhookactive: {
-      type: Sequelize.BOOLEAN,
-      defaultValue: false
-   }
-});
-
-// --------------------------------
-// Database tasks table definition
-// --------------------------------
-
-console.log("DEBUG: Pre Stage Database tasks table definition");
-const Tasks = db.define("tasks", {
-   origin: Sequelize.STRING(32),
-   dest: Sequelize.STRING(32),
-   reply: Sequelize.STRING(32),
-   server: Sequelize.STRING(32),
-   active: {
-      type: Sequelize.BOOLEAN,
-      defaultValue: true
-   },
-   LangTo: {
-      type: Sequelize.STRING(8),
-      defaultValue: "en"
-   },
-   LangFrom: {
-      type: Sequelize.STRING(8),
-      defaultValue: "en"
-   }
-},
+// ----------------------------------
+// Initialise db 
+// -----------------------------------
+exports.initializeDatabase = async function(client)
 {
-   indexes: [
-      {
-         unique: true,
-         name: "ux_index_1",
-         fields: ["origin", "dest", "LangTo", "LangFrom"]
-      }
-   ]
-});
+   // Initialize DB and variables
+   await DbInit.onStartup(db, client, Servers, server_obj);
+};
 
 // -----------------------
 // Add Server to Database
 // -----------------------
-
 exports.addServer = async function(id, lang)
 {
    console.log("DEBUG: Stage Add Server to Database");
@@ -149,10 +42,6 @@ exports.addServer = async function(id, lang)
                         webhookid: null,
                         webhooktoken: null,
                         prefix: "!tr" }).catch(err => console.log("Server already exists error suppressed = ", err));
-   if (id !== "bot")
-   {
-      server_obj[id] = {db: newServer};
-   }
 };
 
 // ------------------
@@ -229,133 +118,6 @@ exports.updatePrefix = function(id, prefix)
    return server_obj[id].db.save();
 };
 
-//---------------------------------------------------------------------------------------------
-//-- All this function are for DB upgrades
-//---------------------------------------------------------------------------------------------
-// -------------------
-// Init/create tables
-// -------------------
-exports.initializeDatabase = async function(client)
-{
-   console.log("DEBUG: Stage Init/create tables - Pre Sync");
-   db.sync({ logging: console.log }).then(async() =>
-   {
-      // Putting DB into newer version if necessary (add columns and so on)
-      await this.upgradeDB();
-      console.log("DEBUG: New columns should be added Before this point.");
-
-      // Initialize Servers objects
-      await this.initializeServers(client);
-      
-      // Things to work on (Bro)
-      console.log("DEBUG: Stage Init/create tables - Pre guildClient");
-      const guildClient = Array.from(client.guilds.values());
-      for (let i = 0; i < guildClient.length; i++)
-      {
-         const guild = guildClient[i];
-         server_obj[guild.id].guild = guild;
-         server_obj[guild.id].size = guild.memberCount;
-         if (!server_obj.size)
-         {
-            server_obj.size = 0;
-         }
-         server_obj.size += guild.memberCount;
-      }
-      console.log("----------------------------------------\nDatabase fully initialized.\n----------------------------------------");
-   });
-};
-
-// -----------------------------
-// Initializate "servers" datas 
-// -----------------------------
-exports.initializeServers = async function(client)
-{
-   // Getting all servers defined in DB
-   const serversFindAll = await Servers.findAll();
-
-   // If table is not initialized, we add a server named bot
-   if (serversFindAll.length === 0)
-   {
-      console.log("DEBUG: Stage Init tables - Adding bot server");
-      await this.addServer("bot", "en");
-   }
-
-   // Getting all servers objects in memory
-   console.log("DEBUG: Stage Init tables - Getting servers from Db");
-   for (let i = 0; i < serversFindAll.length; i++)
-   {
-      // eslint-disable-next-line prefer-const
-      let guild_id = serversFindAll[i].id;
-      // eslint-disable-next-line eqeqeq
-      if (guild_id != "bot")
-      {
-         server_obj[guild_id] = { db: serversFindAll[i] };
-      }
-   }
-
-   // Checking all connected servers to the bot are present in DB
-   console.log("DEBUG: Stage Init tables - Checking bot servers Vs db Servers");
-   const guilds = client.guilds.array().length;
-   const guildsArray = client.guilds.array();
-   var i;
-   for (i = 0; i < guilds; i++)
-   {
-      const guild = guildsArray[i];
-      const guildID = guild.id;
-      // If it doesn't exists, we must add the server connected to the bot
-      if (!server_obj.hasOwnProperty(guildID))
-      {
-         console.log("DEBUG: Stage Init tables - Adding server id:" + guildID);
-         await this.addServer(guildID, "en");
-      }
-   }
-}
-
-// -----------------------------
-// Adding a column in DB if not exists
-// -----------------------------
-exports.addTableColumn = async function(tableName, tableDefinition, columnName, columnType, columnDefault)
-{
-   // Adding column only when it's not in table definition
-   if (!tableDefinition[`${columnName}`])
-   {
-      console.log("--> Adding " + columnName + " column");
-      if (columnDefault === null)
-      {
-         // Adding column whithout a default value
-         await db.getQueryInterface().addColumn(tableName, columnName, {type: columnType});
-      }
-      else 
-      {
-         // Adding column with a default value
-         await db.getQueryInterface().addColumn(tableName, columnName, {
-               type: columnType,
-               defaultValue: columnDefault});
-      }
-   }
-}
-
-// -----------------------------
-// Upgrade DB to new version of RITA
-// -----------------------------
-exports.upgradeDB = async function(data)
-{
-   console.log("DEBUG: Stage Add Missing Variable Columns for old RITA release");
-   // For older version of RITA, they need to upgrade DB with adding new columns if needed
-   serversDefinition = await db.getQueryInterface().describeTable("servers");
-   await this.addTableColumn("servers", serversDefinition, "prefix", Sequelize.STRING(32), "!tr");
-   await this.addTableColumn("servers", serversDefinition, "embedstyle", Sequelize.STRING(8), "on");
-   await this.addTableColumn("servers", serversDefinition, "bot2botstyle",  Sequelize.STRING(8), "off");
-   await this.addTableColumn("servers", serversDefinition, "webhookid", Sequelize.STRING(32));
-   await this.addTableColumn("servers", serversDefinition, "webhooktoken", Sequelize.STRING(255));
-   await this.addTableColumn("servers", serversDefinition, "webhookactive", Sequelize.BOOLEAN, false);
-   console.log("DEBUG: All New Columns Checked or Added");
-
-   // For older version of RITA, must remove old unique index
-   console.log("DEBUG: Stage Remove old RITA Unique index");
-   await db.getQueryInterface().removeIndex("tasks", "tasks_origin_dest");
-   console.log("DEBUG : All old index removed");
-};
 
 // ------------------
 // Get Channel Tasks
@@ -561,7 +323,7 @@ exports.getServerInfo = function(id, callback)
       type: db.QueryTypes.SELECT})
       .then(
          result => callback(result),
-         err => this.upgradeDB() //+ logger("error", err + "\nQuery: " + err.sql, "db")
+         err => logger("error", err + "\nQuery: " + err.sql, "db") //this.upgradeDB()
       );
 };
 
