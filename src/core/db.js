@@ -26,7 +26,7 @@ const Stats = DbInit.defineStats(db);
 exports.initializeDatabase = async function(client)
 {
    // Initialize DB and variables
-   await DbInit.onStartup(db, client, Servers, server_obj);
+   await DbInit.onStartup(db, client, Servers, Stats, server_obj);
 };
 
 // -----------------------
@@ -34,19 +34,20 @@ exports.initializeDatabase = async function(client)
 // -----------------------
 exports.addServer = async function(id, lang)
 {
-   ///////////////////////////////////////////////////////// TO CHANGE : MUST BE A CREATE IF NOT EXISTS /////////////////////////////
    console.log("DEBUG: Stage Add Server to Database");
-   newServer = await Servers.create({  
-                        embedstyle: "on",
-                        bot2botstyle: "off",
-                        id: id,
-                        lang: lang,
-                        webhookid: null,
-                        webhooktoken: null,
-                        prefix: "!tr" }).catch(err => console.log("Server already exists error suppressed = ", err));
-   server_obj[id] = {db : newServer};
-   await Stats.create({id});
-
+   if (!server_obj[id] && id !== "bot")
+   {
+      newServer = await Servers.create({  
+                           embedstyle: "on",
+                           bot2botstyle: "off",
+                           id: id,
+                           lang: lang,
+                           webhookid: null,
+                           webhooktoken: null,
+                           prefix: "!tr" }).catch(err => console.log("Server already exists error suppressed = ", err));
+      server_obj[id] = {db : newServer};
+      await Stats.create({id});
+   }
 };
 
 // ------------------

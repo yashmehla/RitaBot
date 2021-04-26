@@ -144,42 +144,41 @@ exports.defineTasks = function (db)
 exports.defineStats = function (db)
 {
    console.log("DEBUG: Pre Stage Database stats table definition");
-   return db.define(
-      "stats",
+   return db.define("stats",
       {
-         "id": {
-            "type": Sequelize.STRING(32),
-            "primaryKey": true,
-            "unique": true,
-            "allowNull": false
+         id: {
+            type: Sequelize.STRING(32),
+            primaryKey: true,
+            unique: true,
+            allowNull: false
          },
-         "message": {
-            "type": Sequelize.INTEGER,
-            "defaultValue": 0
+         message: {
+            type: Sequelize.INTEGER,
+            defaultValue: 0
          },
-         "translation": {
-            "type": Sequelize.INTEGER,
-            "defaultValue": 0
+         translation: {
+            type: Sequelize.INTEGER,
+            defaultValue: 0
          },
-         "embedon": {
-            "type": Sequelize.INTEGER,
-            "defaultValue": 0
+         embedon: {
+            type: Sequelize.INTEGER,
+            defaultValue: 0
          },
-         "embedoff": {
-            "type": Sequelize.INTEGER,
-            "defaultValue": 0
+         embedoff: {
+            type: Sequelize.INTEGER,
+            defaultValue: 0
          },
-         "images": {
-            "type": Sequelize.INTEGER,
-            "defaultValue": 0
+         images: {
+            type: Sequelize.INTEGER,
+            defaultValue: 0
          },
-         "gif": {
-            "type": Sequelize.INTEGER,
-            "defaultValue": 0
+         gif: {
+            type: Sequelize.INTEGER,
+            defaultValue: 0
          },
-         "react": {
-            "type": Sequelize.INTEGER,
-            "defaultValue": 0
+         react: {
+            type: Sequelize.INTEGER,
+            defaultValue: 0
          }
       }
    );
@@ -191,17 +190,17 @@ exports.defineStats = function (db)
 // -------------------
 // Init/create tables
 // -------------------
-exports.onStartup = async function(db, client, Servers, server_obj)
+exports.onStartup = async function(db, client, Servers, Stats, server_obj)
 {
    console.log("DEBUG: Stage Init/create tables - Pre Sync");
    db.sync({ logging: console.log }).then(async() =>
    {
       // Putting DB into newer version if necessary (add columns and so on)
-      await upgradeDB(db);
+      await this.upgradeDB(db);
       console.log("DEBUG: New columns should be added Before this point.");
 
       // Initialize Servers objects
-      await initializeServers(client, Servers, server_obj);
+      await initializeServers(client, Servers, Stats, server_obj);
 
       console.log("----------------------------------------\nDatabase fully initialized.\n----------------------------------------");
    });
@@ -256,7 +255,7 @@ addTableColumn = async function(tableName, tableDefinition, columnName, columnTy
 // -----------------------------
 // Initializate "servers" datas 
 // -----------------------------
-initializeServers = async function(client, Servers, server_obj)
+initializeServers = async function(client, Servers, Stats, server_obj)
 {
    // Getting all servers defined in DB
    const serversFindAll = await Servers.findAll();
@@ -284,8 +283,8 @@ initializeServers = async function(client, Servers, server_obj)
 
    // Checking that all connected servers are present in DB
    console.log("DEBUG: Stage Init tables - Checking bot servers Vs db Servers");
-   const guilds = client.guilds.array().length;
-   const guildsArray = client.guilds.array();
+   const guilds = client.guilds.cache.array().length;
+   const guildsArray = client.guilds.cache.array();
    var i;
    for (i = 0; i < guilds; i++)
    {
@@ -298,12 +297,13 @@ initializeServers = async function(client, Servers, server_obj)
          let connectedServer = await Servers.create({id: guildID, lang: "en"});
          server_obj[guildID] = { db: connectedServer };
          await connectedServer.save();
+         await Stats.upsert({"id": guildID});
       }
    }
 
    // Adding additional information in server_obj (name of the guilde, number of members)
    console.log("DEBUG: Stage Init/create tables - Pre guildClient");
-   const guildClient = Array.from(client.guilds.values());
+   const guildClient = Array.from(client.guilds.cache.values());
    for (let i = 0; i < guildClient.length; i++)
    {
       const guild = guildClient[i];
