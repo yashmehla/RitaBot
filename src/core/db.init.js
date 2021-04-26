@@ -141,6 +141,50 @@ exports.defineTasks = function (db)
    });
 };
 
+exports.defineStats = function (db)
+{
+   console.log("DEBUG: Pre Stage Database stats table definition");
+   return db.define(
+      "stats",
+      {
+         "id": {
+            "type": Sequelize.STRING(32),
+            "primaryKey": true,
+            "unique": true,
+            "allowNull": false
+         },
+         "message": {
+            "type": Sequelize.INTEGER,
+            "defaultValue": 0
+         },
+         "translation": {
+            "type": Sequelize.INTEGER,
+            "defaultValue": 0
+         },
+         "embedon": {
+            "type": Sequelize.INTEGER,
+            "defaultValue": 0
+         },
+         "embedoff": {
+            "type": Sequelize.INTEGER,
+            "defaultValue": 0
+         },
+         "images": {
+            "type": Sequelize.INTEGER,
+            "defaultValue": 0
+         },
+         "gif": {
+            "type": Sequelize.INTEGER,
+            "defaultValue": 0
+         },
+         "react": {
+            "type": Sequelize.INTEGER,
+            "defaultValue": 0
+         }
+      }
+   );
+};
+
 //---------------------------------------------------------------------------------------------
 //-- All this function are for DB init
 //---------------------------------------------------------------------------------------------
@@ -166,7 +210,7 @@ exports.onStartup = async function(db, client, Servers, server_obj)
 // -----------------------------
 // Upgrade DB to new version of RITA
 // -----------------------------
-upgradeDB = async function(db)
+exports.upgradeDB = async function(db)
 {
    console.log("DEBUG: Checking Missing Variable Columns for old RITA release");
    // For older version of RITA, they need to upgrade DB with adding new columns if needed
