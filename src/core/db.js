@@ -18,6 +18,7 @@ exports.server_obj = server_obj;
 const db = DbInit.getDbInstance();
 const Servers = DbInit.defineServers(db);
 const Tasks = DbInit.defineTasks(db);
+const Stats = DbInit.defineStats(db);
 
 // ----------------------------------
 // Initialise db 
@@ -33,6 +34,7 @@ exports.initializeDatabase = async function(client)
 // -----------------------
 exports.addServer = async function(id, lang)
 {
+   ///////////////////////////////////////////////////////// TO CHANGE : MUST BE A CREATE IF NOT EXISTS /////////////////////////////
    console.log("DEBUG: Stage Add Server to Database");
    newServer = await Servers.create({  
                         embedstyle: "on",
@@ -42,6 +44,9 @@ exports.addServer = async function(id, lang)
                         webhookid: null,
                         webhooktoken: null,
                         prefix: "!tr" }).catch(err => console.log("Server already exists error suppressed = ", err));
+   server_obj[id] = {db : newServer};
+   await Stats.create({id});
+
 };
 
 // ------------------
@@ -270,14 +275,31 @@ exports.addTask = function(task)
    });
 };
 
-// ------------
-// Update stat
-// ------------
+// -------------
+// Update stats
+// -------------
 
-exports.increaseServers = function(id)
+// Increase the count in Servers table
+exports.increaseServersCount = function increaseServersCount (id)
 {
-   console.log("DEBUG: Stage Update stat");
-   return Servers.increment("count", { where: { id: id }});
+
+   console.log("DEBUG: Stage Update count in Servers table");
+   return Servers.increment(
+      "count",
+      {"where": {id}}
+   );
+
+};
+
+exports.increaseStatsCount = function increaseStatsCount (col, id)
+{
+
+   console.log("DEBUG: Stage Update counts in stats table");
+   return Stats.increment(
+      col,
+      {"where": {id}}
+   );
+
 };
 
 // --------------
@@ -294,10 +316,23 @@ exports.getStats = function(callback)
   `(select count(distinct origin) as "activeTasks" ` +
   `from tasks where active = TRUE) as table4, ` +
   `(select count(distinct origin) as "activeUserTasks" ` +
-  `from tasks where active = TRUE and origin like '@%') as table5;`, { type: Sequelize.QueryTypes.SELECT})
-      .then(
-         result => callback(result),
-         err => logger("error", err + "\nQuery: " + err.sql, "db")
+  `from tasks where active = TRUE and origin like '@%') as table5,` +
+  `(select message as "message" from stats where id = 'bot') as table6,` +
+  `(select translation as "translation" from stats where id = 'bot') as table7,` +
+  `(select embedon as "embedon" from stats where id = 'bot') as table8,` +
+  `(select embedoff as "embedoff" from stats where id = 'bot') as table9, ` +
+  `(select images as "images" from stats where id = 'bot') as table10, ` +
+  `(select react as "react" from stats where id = 'bot') as table11, ` +
+  `(select gif as "gif" from stats where id = 'bot') as table12;`,
+      {"type": Sequelize.QueryTypes.SELECT}
+   ).
+      then(
+         (result) => callback(result),
+         (err) => logger(
+            "error",
+            `${err}\nQuery: ${err.sql}`,
+            "db"
+         )
       );
 };
 
@@ -319,11 +354,18 @@ exports.getServerInfo = function(id, callback)
    `(select webhookactive as "webhookactive" from servers where id = ?) as table6,` +
    `(select webhookid as "webhookid" from servers where id = ?) as table7,` +
    `(select webhooktoken as "webhooktoken" from servers where id = ?) as table8,` +
-   `(select prefix as "prefix" from servers where id = ?) as table9;`, { replacements: [ id, id, id, id, id, id, id, id, id],
-      type: db.QueryTypes.SELECT})
-      .then(
-         result => callback(result),
-         err => logger("error", err + "\nQuery: " + err.sql, "db") //this.upgradeDB()
+   `(select prefix as "prefix" from servers where id = ?) as table9,` +
+   `(select message as "message" from stats where id = ?) as table10,` +
+   `(select translation as "translation" from stats where id = ?) as table11,` +
+   `(select embedon as "embedon" from stats where id = ?) as table12, ` +
+   `(select embedoff as "embedoff" from stats where id = ?) as table13, ` +
+   `(select images as "images" from stats where id = ?) as table14, ` +
+   `(select react as "react" from stats where id = ?) as table15, ` +
+   `(select gif as "gif" from stats where id = ?) as table16;`, {"replacements": [ id, id, id, id, id, id, id, id, id, id, id, id, id, id, id, id],
+      "type": db.QueryTypes.SELECT}).
+      then(
+         (result) => callback(result),
+         (err) => DbInit.upgrageDB()
       );
 };
 
