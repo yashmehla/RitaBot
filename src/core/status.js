@@ -19,7 +19,7 @@ module.exports = function run (bot, status, config, writable = true)
 
    const activevar = [
       `Grammarly Universe Translator`,
-      `Grammarly Universe Translator`,
+      `!tr this to english: <message>`,
       "Grammarly Universe Translator",
       `!tr this to english: <message>`,
       "Grammarly Universe Translator",
