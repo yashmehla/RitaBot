@@ -21,7 +21,7 @@ module.exports = function run (bot, status, config, writable = true)
       `Grammarly Universe Translator`,
       `Grammarly Universe Translator`,
       "Grammarly Universe Translator",
-      `Grammarly Universe Translator`,
+      `!tr this to english: <message>`,
       "Grammarly Universe Translator",
       `v.${config.version} | ritabot.gg`,
       `!tr help modules | ritabot.gg`
